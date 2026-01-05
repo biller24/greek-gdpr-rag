@@ -41,7 +41,7 @@ if __name__ == "__main__":
     project_root = current_script.parent.parent
 
     # Define the path to the PDF and the DB folder
-    pdf_path = project_root / "data" / "fek_5548.pdf"
+    pdf_path = project_root / "data" / "Ν_4624_2019.pdf"
     db_path = project_root / "chroma_db"
 
     if pdf_path.exists():

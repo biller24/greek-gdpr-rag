@@ -4,4 +4,3 @@ chroma_db/
 __pycache__/
 *.pyc
 .idea/
-data_s/user_files/

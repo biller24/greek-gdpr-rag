@@ -76,3 +76,6 @@ Maximal Marginal Relevance (MMR): Αντί για απλή αναζήτηση ο
 Chunking Strategy Optimization: Πειραματίστηκα με διάφορα μεγέθη chunks και overlaps. Κατέληξα σε ένα chunk_size των 800-1000 tokens με 10% overlap, ώστε να διατηρείται το νομικό νόημα (context) χωρίς να κόβονται οι προτάσεις στη μέση.
 
 Context Scaling: Ρύθμισα το k=7 στον retriever της βάσης δεδομένων για να δώσω στο LLM αρκετό "νομικό βάθος", διατηρώντας παράλληλα τον έλεγχο για την αποφυγή θορύβου στην απάντηση.
+## 📺 Demo & Validation
+Μπορείτε να δείτε αναλυτικά παραδείγματα ερωτήσεων και απαντήσεων, καθώς και τον έλεγχο συμμόρφωσης (Compliance Audit) που πραγματοποιεί το σύστημα, στο αρχείο:
+👉 [**Test Scenarios & Showcase**](examples/test_scenarios.md)

@@ -1,6 +1,20 @@
-.venv/
+# Environment Variables 
 .env
-chroma_db/
+
+# Python
 __pycache__/
-*.pyc
+*.py[cod]
+.venv/
+build/
+dist/
+
+# Local Vector DB (Too big for GitHub)
+chroma_db/
+
+# MLflow Logs
+mlruns/
+
+# Streamlit logs & temp files
+.streamlit/
+*.pdf
 .idea/

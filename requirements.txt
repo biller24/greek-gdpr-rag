@@ -10,16 +10,25 @@ google-generativeai
 sentence-transformers
 transformers
 torch
+protobuf
 
 # --- Data & Vector DB ---
 chromadb
 pypdf
 PyMuPDF
+docarray
+tiktoken
 
 # --- UI & Environment ---
 streamlit
 python-dotenv
+fastapi
+uvicorn
 
 # --- Utilities ---
 pydantic
 numpy
+setuptools
+
+# --- MLOps & Tracking ---
+mlflow

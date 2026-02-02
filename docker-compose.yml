@@ -1,0 +1,25 @@
+version: '3.8'
+
+services:
+  # The RAG Application
+  rag-app:
+    build: .
+    container_name: gdpr-rag-app
+    ports:
+      - "8501:8501"
+    env_file:
+      - .env
+    volumes:
+      - ./mlruns:/app/mlruns
+      - ./chroma_db:/app/chroma_db
+    restart: always
+
+  # The MLflow UI Server
+  mlflow-server:
+    image: ghcr.io/mlflow/mlflow
+    container_name: mlflow-explorer
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./mlruns:/mlruns
+    command: mlflow ui --host 0.0.0.0 --port 5000 --backend-store-uri /mlruns

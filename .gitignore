@@ -13,6 +13,7 @@ chroma_db/
 
 # MLflow Logs
 mlruns/
+mlflow.db
 
 # Streamlit logs & temp files
 .streamlit/

@@ -17,5 +17,5 @@ mlflow.db
 
 # Streamlit logs & temp files
 .streamlit/
-*.pdf
+*.jsonl
 .idea/

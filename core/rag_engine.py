@@ -12,6 +12,7 @@ load_dotenv()
 
 import mlflow
 import time
+import json
 
 def get_answer_with_context(query_text, user_docs=None):
     # Path Setup
@@ -85,7 +86,21 @@ def get_answer_with_context(query_text, user_docs=None):
 
         response = chain.invoke({"context": context_docs, "question": query_text})
 
-        # --- LOG METRICS ---
+        eval_entry = {
+            "question": query_text,
+            "answer": response,
+            "contexts": [doc.page_content for doc in context_docs],
+            "timestamp": time.time()
+        }
+
+        evaluation_logs_path = project_root / "data" / "evaluation-logs" / "eval_logs.jsonl"
+        evaluation_logs_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(evaluation_logs_path, "a", encoding="utf-8") as f:
+            json.dump(eval_entry, f, ensure_ascii=False)
+            f.write("\n---\n")
+
+        #Log metrics
         generation_time = time.time() - start_time
         mlflow.log_metric("latency_sec", generation_time)
         mlflow.log_metric("source_count", len(context_docs))

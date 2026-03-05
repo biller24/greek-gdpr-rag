@@ -9,9 +9,13 @@ services:
       - "8501:8501"
     env_file:
       - .env
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
+      - .:/app
       - ./mlruns:/app/mlruns
       - ./chroma_db:/app/chroma_db
+      - ./data:/app/data/evaluation_logs
     restart: always
 
   # The MLflow UI Server

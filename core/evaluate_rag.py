@@ -4,6 +4,7 @@ from pathlib import Path
 import mlflow
 from datasets import Dataset
 from openai import AsyncOpenAI
+import os
 
 from langchain_huggingface import HuggingFaceEmbeddings
 import asyncio
@@ -16,14 +17,14 @@ mlflow_uri = (project_root / "mlruns").as_uri()
 
 # Create an OpenAI-compatible client for Ollama
 client = AsyncOpenAI(
-    base_url="http://host.docker.internal:11434/v1",
-    api_key="ollama"    # Ollama doesn't require a real key
+    api_key=os.environ["OPENAI_API_KEY"]
 )
+
 evaluator_llm = llm_factory(
-    model="llama3.1:8b",
-    provider="openai",
+    model="gpt-4.1-mini",
     client=client,
-    temperature = 0
+    temperature=0,
+    max_tokens=4096
 )
 
 embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2")
@@ -79,7 +80,7 @@ async def run_offline_audit():
             scores.append(score_value)
 
         except Exception as e:
-            print(f"❌ Error at sample {i + 1}: {e}")
+            print(f"Error at sample {i + 1}: {e}")
             continue
 
     if scores:

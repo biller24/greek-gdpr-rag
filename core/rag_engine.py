@@ -1,4 +1,3 @@
-
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -8,36 +7,37 @@ from langchain_community.vectorstores import DocArrayInMemorySearch
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
+
 load_dotenv()
 
 import mlflow
 import time
 import json
 
+# Path Setup
+project_root = Path(__file__).resolve().parent.parent
+mlruns_path = project_root / "mlruns"
+mlflow.set_tracking_uri(mlruns_path.as_uri())
+mlflow.set_experiment("GDPR_Greek_Auditor")
+db_path = project_root / "chroma_db"
+
+embeddings = HuggingFaceEmbeddings(
+    model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
+)
+vector_db = Chroma(persist_directory=str(db_path), embedding_function=embeddings)
+
+llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
+
+
 def get_answer_with_context(query_text, user_docs=None):
-    # Path Setup
-    project_root = Path(__file__).resolve().parent.parent
-    mlruns_path = project_root / "mlruns"
-    mlflow.set_tracking_uri(mlruns_path.as_uri())
-    mlflow.set_experiment("GDPR_Greek_Auditor")
     with mlflow.start_run():
-        start_time = time.time()  # Για να μετρήσουμε το latency
+        start_time = time.time()
 
         # --- LOG PARAMETERS ---
         mlflow.log_param("query_length", len(query_text))
         mlflow.log_param("k_laws", 7)
         mlflow.log_param("has_user_pdf", user_docs is not None)
 
-        project_root = Path(__file__).resolve().parent.parent
-        db_path = project_root / "chroma_db"
-
-        # Embeddings (The Librarian)
-        embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-        )
-
-        #  Load Vector DB
-        vector_db = Chroma(persist_directory=str(db_path), embedding_function=embeddings)
         laws_retriever = vector_db.as_retriever(
             search_type="mmr",  # for variety
             search_kwargs={'k': 7}
@@ -58,16 +58,15 @@ def get_answer_with_context(query_text, user_docs=None):
 
             context_docs.extend(user_specific_chunks)
 
-        #  Initialize Gemini
-        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
-
         # Prompt
         template = """Είσαι ο 'GDPR Greece AI Analyst'. 
 
-    ΟΔΗΓΙΕΣ:
-    1. Χρησιμοποίησε τα αποσπάσματα από τη Νομοθεσία για να απαντήσεις στην ερώτηση.
-    2. ΑΝ και ΜΟΝΟ ΑΝ υπάρχουν αποσπάσματα με την ένδειξη 'Το Έγγραφό σας', χρησιμοποίησέ τα για να κάνεις σύγκριση ή να δώσεις εξειδικευμένες πληροφορίες που αφορούν τον χρήστη.
-    3. Αν δεν υπάρχει έγγραφο χρήστη στο Context, απάντησε γενικά με βάση τους νόμους.
+ΟΔΗΓΙΕΣ:
+1. Απάντησε ΑΠΟΚΛΕΙΣΤΙΚΑ βάσει των αποσπασμάτων που σου παρέχονται στο Context.
+2. ΜΗΝ προσθέτεις πληροφορίες, ερμηνείες ή συμπεράσματα που ΔΕΝ υπάρχουν ρητά στο Context.
+3. Αν δεν μπορείς να απαντήσεις πλήρως από το Context, δήλωσέ το ρητά: 'Δεν υπάρχει επαρκής πληροφορία στα διαθέσιμα αποσπάσματα.'
+4. ΑΝ και ΜΟΝΟ ΑΝ υπάρχουν αποσπάσματα με την ένδειξη 'Το Έγγραφό σας', χρησιμοποίησέ τα για σύγκριση με τη νομοθεσία.
+5. Παράθεσε πάντα το άρθρο ή τον νόμο από το οποίο αντλείς την πληροφορία.
     
         Context: {context}
 
@@ -98,9 +97,9 @@ def get_answer_with_context(query_text, user_docs=None):
 
         with open(evaluation_logs_path, "a", encoding="utf-8") as f:
             json.dump(eval_entry, f, ensure_ascii=False)
-            f.write("\n---\n")
+            f.write("\n")
 
-        #Log metrics
+        # Log metrics
         generation_time = time.time() - start_time
         mlflow.log_metric("latency_sec", generation_time)
         mlflow.log_metric("source_count", len(context_docs))
@@ -113,5 +112,3 @@ def get_answer_with_context(query_text, user_docs=None):
             sources.add(f"{law} (Σελίδα {page + 1})")
 
         return {"answer": response, "sources": sorted(list(sources))}
-
-

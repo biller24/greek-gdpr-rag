@@ -16,6 +16,7 @@ services:
       - ./mlruns:/app/mlruns
       - ./chroma_db:/app/chroma_db
       - ./data:/app/data/evaluation_logs
+      - hf_cache:/root/.cache/huggingface
     restart: always
 
   # The MLflow UI Server
@@ -27,3 +28,5 @@ services:
     volumes:
       - ./mlruns:/mlruns
     command: mlflow ui --host 0.0.0.0 --port 5000 --backend-store-uri /mlruns
+volumes:
+  hf_cache:

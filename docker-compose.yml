@@ -11,11 +11,9 @@ services:
       - .env
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    command: streamlit run app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true --server.fileWatcherType=poll
     volumes:
       - .:/app
-      - ./mlruns:/app/mlruns
-      - ./chroma_db:/app/chroma_db
-      - ./data:/app/data/evaluation_logs
       - hf_cache:/root/.cache/huggingface
     restart: always
 

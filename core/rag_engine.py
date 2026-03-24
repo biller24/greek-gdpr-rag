@@ -4,17 +4,15 @@ from dotenv import load_dotenv
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 from langchain_community.vectorstores import DocArrayInMemorySearch
-from langchain_community.retrievers import BM25Retriever
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import ChatPromptTemplate
 from sentence_transformers import CrossEncoder
-from openai import OpenAI
+from collections import Counter
 
 
 load_dotenv()
 
-import os
 import mlflow
 import time
 import json
@@ -26,26 +24,47 @@ mlflow.set_tracking_uri(mlruns_path.as_uri())
 mlflow.set_experiment("GDPR_Greek_Auditor")
 db_path = project_root / "chroma_db"
 
-embeddings = HuggingFaceEmbeddings(
-    model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-)
-vector_db = Chroma(persist_directory=str(db_path), embedding_function=embeddings)
 
-llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
-reranker = CrossEncoder("cross-encoder/mmarco-mMiniLMv2-L12-H384-v1")
-rewriter_llm = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
-
-def rewrite_query(query: str) -> str:
-    response = rewriter_llm.chat.completions.create(
-        model="gpt-4.1-mini",
-        temperature=0,
-        messages=[
-            {"role": "system", "content": "Είσαι βοηθός νομικής έρευνας. Ξαναγράψε την ερώτηση του χρήστη ως επίσημο νομικό ερώτημα για αναζήτηση σε ελληνική και ευρωπαϊκή νομοθεσία προστασίας δεδομένων. Απάντησε ΜΟΝΟ με την ξαναγραμμένη ερώτηση."},
-            {"role": "user", "content": query}
-        ]
+def load_rag_components():
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     )
-    return response.choices[0].message.content.strip()
+    vector_db = Chroma(persist_directory=str(db_path), embedding_function=embeddings)
+    reranker = CrossEncoder("cross-encoder/mmarco-mMiniLMv2-L12-H384-v1")
 
+    llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", temperature=0)
+
+    return embeddings, vector_db, reranker,  llm
+
+# Then unpack at module level:
+embeddings, vector_db, reranker,  llm = load_rag_components()
+
+
+def rerank_docs(query, docs, top_n=7, min_per_law=1):
+    if not docs:
+        return docs
+
+    pairs = [(query, doc.page_content) for doc in docs]
+    scores = reranker.predict(pairs)
+    scored_docs = sorted(zip(scores, docs), key=lambda x: x[0], reverse=True)
+
+    seen_laws = {}
+    guaranteed = []
+    remaining = []
+
+    for score, doc in scored_docs:
+        law = doc.metadata.get("source_law", "unknown")
+        count = seen_laws.get(law, 0)
+        if count < min_per_law:
+            seen_laws[law] = count + 1
+            guaranteed.append(doc)
+        else:
+            remaining.append(doc)
+
+    result = guaranteed + remaining
+    final = result[:max(top_n, len(guaranteed))]
+
+    return final
 
 def get_answer_with_context(query_text, user_docs=None):
     with mlflow.start_run():
@@ -56,23 +75,22 @@ def get_answer_with_context(query_text, user_docs=None):
         mlflow.log_param("k_laws", 7)
         mlflow.log_param("has_user_pdf", user_docs is not None)
 
-        rewritten_query =  rewrite_query(query_text)
-        mlflow.log_param("rewritten_query", rewritten_query[:250])
-        print(f"Rewritten query: {rewritten_query}")
+        context_docs = vector_db.as_retriever(
+            search_type="mmr",
+            search_kwargs={"k": 7}
+        ).invoke(query_text)
 
-        laws_retriever = vector_db.as_retriever(
-            search_type="mmr",  # for variety
-            search_kwargs={'k': 7}
-        )
+        law_counts = Counter(doc.metadata.get("source_law") for doc in context_docs)
+        print(f"Retrieved before reranking: {dict(law_counts)}")
+        mlflow.log_param("hybrid_retrieved", len(context_docs))
 
-        # Combine context
-        context_docs = laws_retriever.invoke(rewritten_query)
+        context_docs = rerank_docs(query_text, context_docs)
 
         if user_docs:
             # Create temporary database in RAM for user's PDF
             local_db = DocArrayInMemorySearch.from_documents(user_docs, embeddings)
             local_retriever = local_db.as_retriever(search_kwargs={"k": 5})
-            user_specific_chunks = local_retriever.invoke(rewritten_query)
+            user_specific_chunks = local_retriever.invoke(query_text)
 
             # Mark user's PDF
             for doc in user_specific_chunks:
@@ -105,10 +123,10 @@ def get_answer_with_context(query_text, user_docs=None):
                 | StrOutputParser()
         )
 
-        response = chain.invoke({"context": context_docs, "question": rewritten_query})
+        response = chain.invoke({"context": context_docs, "question": query_text})
 
         eval_entry = {
-            "question": rewritten_query,
+            "question": query_text,
             "answer": response,
             "contexts": [doc.page_content for doc in context_docs],
             "timestamp": time.time()

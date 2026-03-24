@@ -38,3 +38,6 @@ mlflow
 ragas
 datasets
 
+
+langchain-classic
+rank-bm25

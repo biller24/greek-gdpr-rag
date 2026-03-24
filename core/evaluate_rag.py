@@ -16,7 +16,6 @@ project_root = Path(__file__).resolve().parent.parent
 log_file = project_root / "data" / "evaluation-logs" / "eval_logs.jsonl"
 mlflow_uri = (project_root / "mlruns").as_uri()
 
-# Create an OpenAI-compatible client for Ollama
 client = AsyncOpenAI(
     api_key=os.environ["OPENAI_API_KEY"]
 )

@@ -40,7 +40,7 @@ def load_rag_components():
 embeddings, vector_db, reranker,  llm = load_rag_components()
 
 
-def rerank_docs(query, docs, top_n=7, min_per_law=1):
+def rerank_docs(query, docs, top_n=12):
     if not docs:
         return docs
 
@@ -48,23 +48,7 @@ def rerank_docs(query, docs, top_n=7, min_per_law=1):
     scores = reranker.predict(pairs)
     scored_docs = sorted(zip(scores, docs), key=lambda x: x[0], reverse=True)
 
-    seen_laws = {}
-    guaranteed = []
-    remaining = []
-
-    for score, doc in scored_docs:
-        law = doc.metadata.get("source_law", "unknown")
-        count = seen_laws.get(law, 0)
-        if count < min_per_law:
-            seen_laws[law] = count + 1
-            guaranteed.append(doc)
-        else:
-            remaining.append(doc)
-
-    result = guaranteed + remaining
-    final = result[:max(top_n, len(guaranteed))]
-
-    return final
+    return [doc for score, doc in scored_docs[:top_n]]
 
 def get_answer_with_context(query_text, user_docs=None):
     with mlflow.start_run():
@@ -72,17 +56,17 @@ def get_answer_with_context(query_text, user_docs=None):
 
         # --- LOG PARAMETERS ---
         mlflow.log_param("query_length", len(query_text))
-        mlflow.log_param("k_laws", 7)
+        mlflow.log_param("k_laws", 24)
         mlflow.log_param("has_user_pdf", user_docs is not None)
 
         context_docs = vector_db.as_retriever(
             search_type="mmr",
-            search_kwargs={"k": 7}
+            search_kwargs={"k": 24}
         ).invoke(query_text)
 
         law_counts = Counter(doc.metadata.get("source_law") for doc in context_docs)
         print(f"Retrieved before reranking: {dict(law_counts)}")
-        mlflow.log_param("hybrid_retrieved", len(context_docs))
+        mlflow.log_param("retrieved", len(context_docs))
 
         context_docs = rerank_docs(query_text, context_docs)
 
@@ -99,18 +83,16 @@ def get_answer_with_context(query_text, user_docs=None):
             context_docs.extend(user_specific_chunks)
 
         # Prompt
-        template = """Είσαι ο 'GDPR Greece AI Analyst'. 
+        template = """Είσαι ο 'GDPR Greece AI Analyst'. Απάντησε με ακρίβεια, επαγγελματισμό και ΣΥΝΤΟΜΙΑ.
 
 ΟΔΗΓΙΕΣ:
-1. Απάντησε ΑΠΟΚΛΕΙΣΤΙΚΑ βάσει των αποσπασμάτων που σου παρέχονται στο Context.
-2. ΜΗΝ προσθέτεις πληροφορίες, ερμηνείες ή συμπεράσματα που ΔΕΝ υπάρχουν ρητά στο Context.
-3. Αν δεν μπορείς να απαντήσεις πλήρως από το Context, δήλωσέ το ρητά: 'Δεν υπάρχει επαρκής πληροφορία στα διαθέσιμα αποσπάσματα.'
-4. ΑΝ και ΜΟΝΟ ΑΝ υπάρχουν αποσπάσματα με την ένδειξη 'Το Έγγραφό σας', χρησιμοποίησέ τα για σύγκριση με τη νομοθεσία.
-5. Παράθεσε πάντα το άρθρο ή τον νόμο από το οποίο αντλείς την πληροφορία.
-    
-        Context: {context}
+1. ΑΠΑΝΤΗΣΗ: Δώσε μια άμεση απάντηση συνθέτοντας ΣΥΝΔΥΑΣΤΙΚΑ όλα τα αποσπάσματα. Αν ένας νέος νόμος (π.χ. Ν. 5169) κυρώνει μια σύμβαση, εξήγησε τη σημασία του με βάση το γενικό πλαίσιο (GDPR) που παρέχεται.
+2. ΣΥΓΚΡΙΣΗ: ΜΟΝΟ αν υπάρχουν αποσπάσματα 'Το Έγγραφό σας', σύγκρινέ τα. Αλλιώς, μην αναφέρεις καθόλου έγγραφα χρήστη.
+3. ΔΟΜΗ: Χρησιμοποίησε σύντομα bullet points.
+4. HALLUCINATIONS: Αν το θέμα λείπει ΠΑΝΤΕΛΩΣ (π.χ. drones, μαγειρική), δήλωσε άγνοια. Αλλά αν το θέμα υπάρχει (π.χ. διαβίβαση δεδομένων), χρησιμοποίησε όλο το διαθέσιμο Context για να απαντήσεις.
+        Context:{context}
 
-        Ερώτηση: {question}
+        Ερώτηση:{question}
         """
 
         prompt = ChatPromptTemplate.from_template(template)

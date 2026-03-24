@@ -41,3 +41,6 @@ datasets
 
 langchain-classic
 rank-bm25
+fastapi
+uvicorn
+python-multipart

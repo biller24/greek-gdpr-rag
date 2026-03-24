@@ -17,6 +17,20 @@ services:
       - hf_cache:/root/.cache/huggingface
     restart: always
 
+  # The API
+  api:
+    build: .
+    container_name: gdpr-api
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    command: uvicorn api:app --host 0.0.0.0 --port 8000
+    volumes:
+      - .:/app
+      - hf_cache:/root/.cache/huggingface
+    restart: always
+
   # The MLflow UI Server
   mlflow-server:
     image: ghcr.io/mlflow/mlflow
